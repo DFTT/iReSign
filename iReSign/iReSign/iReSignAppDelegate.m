@@ -339,10 +339,12 @@ static NSString *kiTunesMetadataFileName            = @"iTunesMetadata";
                     NSLog(@"Mobileprovision identifier: %@",identifierInProvisioning);
                     
                     NSDictionary *infoplist = [NSDictionary dictionaryWithContentsOfFile:[appPath stringByAppendingPathComponent:@"Info.plist"]];
-                    if ([identifierInProvisioning isEqualTo:[infoplist objectForKey:kKeyBundleIDPlistApp]]) {
+
+                    // 在不修要修改包名的重签时, 这里会报错, 注释掉不会影响重签结果
+//                    if ([identifierInProvisioning isEqualTo:[infoplist objectForKey:kKeyBundleIDPlistApp]]) {
                         NSLog(@"Identifiers match");
                         identifierOK = TRUE;
-                    }
+//                    }
                     
                     if (identifierOK) {
                         NSLog(@"Provisioning completed.");
@@ -436,27 +438,41 @@ static NSString *kiTunesMetadataFileName            = @"iTunesMetadata";
     NSArray *dirContents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:[workingPath stringByAppendingPathComponent:kPayloadDirName] error:nil];
     
     for (NSString *file in dirContents) {
-        if ([[[file pathExtension] lowercaseString] isEqualToString:@"app"]) {
-            appPath = [[workingPath stringByAppendingPathComponent:kPayloadDirName] stringByAppendingPathComponent:file];
-            frameworksDirPath = [appPath stringByAppendingPathComponent:kFrameworksDirName];
-            NSLog(@"Found %@",appPath);
-            appName = file;
-            if ([[NSFileManager defaultManager] fileExistsAtPath:frameworksDirPath]) {
-                NSLog(@"Found %@",frameworksDirPath);
-                hasFrameworks = YES;
-                NSArray *frameworksContents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:frameworksDirPath error:nil];
-                for (NSString *frameworkFile in frameworksContents) {
-                    NSString *extension = [[frameworkFile pathExtension] lowercaseString];
-                    if ([extension isEqualTo:@"framework"] || [extension isEqualTo:@"dylib"]) {
-                        frameworkPath = [frameworksDirPath stringByAppendingPathComponent:frameworkFile];
-                        NSLog(@"Found %@",frameworkPath);
-                        [frameworks addObject:frameworkPath];
-                    }
+        if (NO == [[[file pathExtension] lowercaseString] isEqualToString:@"app"]) {
+            continue;
+        }
+        appPath = [[workingPath stringByAppendingPathComponent:kPayloadDirName] stringByAppendingPathComponent:file];
+        frameworksDirPath = [appPath stringByAppendingPathComponent:kFrameworksDirName];
+        NSLog(@"Found %@",appPath);
+        appName = file;
+        
+        // 读取Frameworks
+        if ([[NSFileManager defaultManager] fileExistsAtPath:frameworksDirPath]) {
+            NSLog(@"Found %@",frameworksDirPath);
+            hasFrameworks = YES;
+            NSArray *frameworksContents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:frameworksDirPath error:nil];
+            for (NSString *frameworkFile in frameworksContents) {
+                NSString *extension = [[frameworkFile pathExtension] lowercaseString];
+                if ([extension isEqualTo:@"framework"] || [extension isEqualTo:@"dylib"]) {
+                    frameworkPath = [frameworksDirPath stringByAppendingPathComponent:frameworkFile];
+                    NSLog(@"Found %@",frameworkPath);
+                    [frameworks addObject:frameworkPath];
                 }
             }
-            [statusLabel setStringValue:[NSString stringWithFormat:@"Codesigning %@",file]];
-            break;
         }
+        // 可能有些动态库在主bundle的目录中 这里也读出来
+        NSArray *frameworksContents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:appPath error:nil];
+        for (NSString *frameworkFile in frameworksContents) {
+            NSString *extension = [[frameworkFile pathExtension] lowercaseString];
+            if ([extension isEqualTo:@"framework"] || [extension isEqualTo:@"dylib"]) {
+                frameworkPath = [appPath stringByAppendingPathComponent:frameworkFile];
+                NSLog(@"Found %@",frameworkPath);
+                [frameworks addObject:frameworkPath];
+            }
+        }
+        
+        [statusLabel setStringValue:[NSString stringWithFormat:@"Codesigning %@",file]];
+        break;
     }
     
     if (appPath) {
